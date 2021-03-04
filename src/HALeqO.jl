@@ -38,6 +38,10 @@ function haleqo(
     start_time = time()
     nx, ny = nlp.meta.nvar, nlp.meta.ncon
     T = eltype(x)
+    
+    if has_bounds(nlp) || inequality_constrained(nlp)
+        error("Problem has inequalities, can't solve it")
+    end
 
     # parameters
     θ = 0.5
