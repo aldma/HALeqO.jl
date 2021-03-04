@@ -18,4 +18,8 @@ You can solve an JuMP model `m` by using NLPModels to convert it.
 
 ### Prerequisites
 
-These codes were written for Julia v1.5.3. The package dependencies are from March 2021, when our experiments were run. You may get Julia from [julialang.org](https://julialang.org/). We compared HALeqO against [IPOPT](https://coin-or.github.io/Ipopt/), via the wrapper [NLPModelsIpopt](https://github.com/JuliaSmoothOptimizers/NLPModelsIpopt.jl), and [NCL.jl](https://github.com/JuliaSmoothOptimizers/NCL.jl) invoking IPOPT.
+These codes were written for Julia v1.5.3. The package dependencies are from March 2021, when our experiments were run. You may get Julia from [julialang.org](https://julialang.org/).
+
+HALeqO.jl uses [HSL.jl](https://github.com/JuliaSmoothOptimizers/HSL.jl)'s `MA57` as main linear solver, based on [HSL](https://www.hsl.rl.ac.uk/). If not available, this could be replaced by [LDLFactorizations.jl](https://github.com/JuliaSmoothOptimizers/LDLFactorizations.jl). It also uses [PositiveFactorizations.jl](https://github.com/timholy/PositiveFactorizations.jl), that could (and perhaps should) be replaced by smarter calls to HSL's `MA57`.
+
+We compared HALeqO against [IPOPT](https://coin-or.github.io/Ipopt/), via the wrapper [NLPModelsIpopt](https://github.com/JuliaSmoothOptimizers/NLPModelsIpopt.jl), and [NCL.jl](https://github.com/JuliaSmoothOptimizers/NCL.jl) invoking IPOPT.
