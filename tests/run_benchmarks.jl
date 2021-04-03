@@ -2,7 +2,7 @@
 # load solvers
 using HALeqO # may need ``push!(LOAD_PATH,"src/")`` or similar
 using NLPModelsIpopt
-using NCL
+using NCL # from https://github.com/JuliaSmoothOptimizers/NCL.jl
 
 # load problems
 using CUTEst
@@ -19,7 +19,6 @@ probnames = CUTEst.select(
 using SolverBenchmark
 using CSV, DataFrames, Printf
 using Plots
-pyplot()
 include("time_profiles.jl")
 
 # setup benchmarking
