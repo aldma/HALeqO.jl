@@ -33,6 +33,7 @@ function haleqo(
     σ::Real = 1e-3,
     μ::Real = 1e-3,
     max_iter::Int = 1000,
+    max_time::Real = 100.0,
 )
 
     start_time = time()
@@ -52,6 +53,7 @@ function haleqo(
 
     # initialization
     iter = 0
+    eltime = 0.0
     status = :unknown
     fx = obj(nlp, x)
     cx = cons(nlp, x)
@@ -65,7 +67,7 @@ function haleqo(
     cviol__old = cviolation
     residy = cviolation
     converged = optimality ≤ tol && cviolation ≤ tol
-    tired = iter ≥ max_iter
+    tired = iter ≥ max_iter || eltime ≥ max_time
     dir = zeros(T, nx + ny)
     xold = zeros(T, nx)
     yold = zeros(T, ny)
@@ -79,18 +81,23 @@ function haleqo(
 
     while !(converged || tired)
 
+        # sub-problem update
         if optimality ≤ tol && residy ≤ tol
-
+            # check improvement in constraint violation
             if cviolation > θ * cviol__old
+                # update dual regularization parameter
                 μ *= κμminus
             end
-
-            @info log_row(Any[iter, fx, cviolation, optimality, σ, μ])
+            # update dual estimate
             yhat .= y
+            # re-evaluate some quantities
             subres[nx+1:nx+ny] .= cx
             cviol__old = cviolation
             residy = cviolation
+            # print
+            @info log_row(Any[iter, fx, cviolation, optimality, σ, μ])
         else
+            # print
             @info log_row(Any[iter, fx, cviolation, optimality, σ, μ, residy])
         end
 
@@ -101,6 +108,16 @@ function haleqo(
         H = hess(nlp, x, y)
         J = jac(nlp, x)
 
+        # TODO
+        # - linear solver refactoring
+        # - set up sparse matrix, lower/upper triangle
+        # - variant: (i) Try to factorize KKT matrix. If successfull go to (ii),
+        #                otherwise go to (iv).
+        #           (ii) Solve linear system, compute slope, and go to (iii).
+        #          (iii) If slope < 0.0, take as search direction and quit, otherwise
+        #                go to (iv).
+        #           (iv) If σ = 0.0, set σ = σinit, otherwise set σ *= κσplus. Go to (i).
+
         H = H + H' - triu(H)
         σ = σhat
         HσI = H + UniformScaling(σ)
@@ -110,7 +127,6 @@ function haleqo(
             HσI = H + UniformScaling(σ)
             Hf, Hd = ldlt(Positive, HσI, Val{true})
         end
-
         KKT = [HσI J'; J UniformScaling(-μ)]
         LDLT = Ma57(KKT)
         ma57_factorize(LDLT)
@@ -122,8 +138,12 @@ function haleqo(
         # ∇y merit = - resy
         xold .= subres[1:nx] + (2.0 / μ) .* jtprod(nlp, x, subres[nx+1:nx+ny])
         # slope of merit along search direction
+        # slope = ∇merit ⋅ dir
         slope = dot(dir[1:nx], xold) - dot(dir[nx+1:nx+ny], subres[nx+1:nx+ny])
-        slope < 0.0 || @warn "nonnegative slope"
+        if slope ≥ 0.0
+            status = :not_desc
+            break
+        end
 
         # line-search
         # backtracking line-search along the primal-dual augmented Lagrangian
@@ -134,39 +154,50 @@ function haleqo(
         τ = one(T)
         x .+= dir[1:nx]
         y .+= dir[nx+1:nx+ny]
-        fx = obj(nlp, x)
-        cons!(nlp, x, cx)
-        m = merit(x, y, yhat, μ, fx, cx)
-        while m > mold + η * τ * slope
-            τ *= β
-            x .= xold + τ .* dir[1:nx]
-            y .= yold + τ .* dir[nx+1:nx+ny]
+        while true
             fx = obj(nlp, x)
             cons!(nlp, x, cx)
             m = merit(x, y, yhat, μ, fx, cx)
+            # check Armijo's condition
+            if m ≤ mold + η * τ * slope
+                break
+            else
+                τ *= β
+                x .= xold + τ .* dir[1:nx]
+                y .= yold + τ .* dir[nx+1:nx+ny]
+            end
         end
 
+        # evaluate residuals and check termination
         subres[1:nx] .= grad(nlp, x) + jtprod(nlp, x, y)
-        subres[nx+1:nx+ny] .= cx + μ .* (yhat - y)
-
         optimality = norm(subres[1:nx], Inf)
-        residy = norm(subres[nx+1:nx+ny], Inf)
         cviolation = norm(cx, Inf)
+        converged = optimality ≤ tol && cviolation ≤ tol
 
         iter += 1
-        converged = optimality ≤ tol && cviolation ≤ tol
-        tired = iter ≥ max_iter
-    end
+        if !converged
+            eltime = time() - start_time
+            tired = iter ≥ max_iter || eltime ≥ max_time
+            if !tired
+                subres[nx+1:nx+ny] .= cx + μ .* (yhat - y)
+                residy = norm(subres[nx+1:nx+ny], Inf)
+            end
+        end
 
-    eltime = time() - start_time
+    end
 
     status = if converged
         :first_order
     elseif tired
-        :max_iter
+        if iter ≥ max_iter
+            :max_iter
+        else
+            :max_time
+        end
     end
 
     # output
+    eltime = time() - start_time
     return GenericExecutionStats(
         status,
         nlp,
