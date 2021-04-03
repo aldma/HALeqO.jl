@@ -2,7 +2,7 @@ module HALeqO
 
 export haleqo
 
-using SolverTools
+using SolverCore
 using LinearAlgebra
 using NLPModels
 using HSL
