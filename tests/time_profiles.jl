@@ -1,5 +1,9 @@
 # A. De Marchi, Feb 2021.
 
+using DataFrames
+using Printf
+using Plots
+
 """
     time_profile(stats, cost)
 Produce a time profile comparing solvers in `stats` using the `cost` function.

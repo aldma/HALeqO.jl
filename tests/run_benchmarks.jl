@@ -17,8 +17,9 @@ probnames = CUTEst.select(
 
 # load tools
 using SolverBenchmark
-using CSV, DataFrames, Printf
+using CSV
 using Plots
+using DataFrames, Printf
 include("time_profiles.jl")
 
 # setup benchmarking
