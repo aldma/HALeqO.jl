@@ -2,25 +2,25 @@ module HALeqO
 
 export haleqo
 
+# JuliaSmoothOptimizers
 using SolverCore
-using LinearAlgebra
 using NLPModels
+# stdlib
+using LinearAlgebra
+using SparseArrays
+# linear solvers
 using HSL
 using PositiveFactorizations
 
 """
     normsq(v)
 """
-function normsq(v)
-    return dot(v, v)
-end
+normsq(v) = dot(v, v)
 
 """
     merit(x, y, yhat, μ, fx, cx)
 """
-function merit(x, y, yhat, μ, fx, cx)
-    return fx + 0.25 * μ * normsq(y) + normsq(cx + μ .* (yhat - 0.5 * y)) / μ
-end
+merit(x, y, yhat, μ, fx, cx) = fx + 0.25 * μ * normsq(y) + normsq(cx + μ .* (yhat - 0.5 * y)) / μ
 
 """
     haleqo( nlp )
@@ -30,7 +30,6 @@ function haleqo(
     x::AbstractVector = copy(nlp.meta.x0),
     y::AbstractVector = copy(nlp.meta.y0),
     tol::Real = 1e-8,
-    σ::Real = 1e-3,
     μ::Real = 1e-3,
     max_iter::Int = 1000,
     max_time::Real = 100.0,
@@ -48,7 +47,6 @@ function haleqo(
     θ = 0.5
     β = 0.5
     κμminus = 0.1
-    κσplus = 10.0
     η = 1e-4
 
     # initialization
@@ -58,7 +56,6 @@ function haleqo(
     fx = obj(nlp, x)
     cx = cons(nlp, x)
     yhat = copy(y)
-    σhat = copy(σ)
     subres = zeros(T, nx + ny)
     subres[1:nx] .= grad(nlp, x) + jtprod(nlp, x, y)
     subres[nx+1:nx+ny] .= cx
@@ -73,8 +70,8 @@ function haleqo(
     yold = zeros(T, ny)
 
     @info log_header(
-        [:iter, :fx, :cviol, :optim, :σ, :μ, :resy],
-        [Int, T, T, T, T, T, T],
+        [:iter, :fx, :cviol, :optim, :μ, :resy],
+        [Int, T, T, T, T, T],
         hdr_override = Dict(:fx => "f(x)", :optim => "‖∇L‖", :cviol => "‖c(x)‖"),
     )
     @info log_row(Any[iter, fx, cviolation, optimality])
@@ -94,11 +91,9 @@ function haleqo(
             subres[nx+1:nx+ny] .= cx
             cviol__old = cviolation
             residy = cviolation
-            # print
-            @info log_row(Any[iter, fx, cviolation, optimality, σ, μ])
+            @info log_row(Any[iter, fx, cviolation, optimality, μ])
         else
-            # print
-            @info log_row(Any[iter, fx, cviolation, optimality, σ, μ, residy])
+            @info log_row(Any[iter, fx, cviolation, optimality, μ, residy])
         end
 
         # search direction
@@ -106,31 +101,13 @@ function haleqo(
         # some perturbation of the Hessian matrix to obtain a descent direction
         # for the merit function
         H = hess(nlp, x, y)
+        H = Symmetric(SparseMatrixCSC(Matrix(cholesky(Positive, H, Val{false}))))
         J = jac(nlp, x)
 
-        # TODO
-        # - linear solver refactoring
-        # - set up sparse matrix, lower/upper triangle
-        # - variant: (i) Try to factorize KKT matrix. If successfull go to (ii),
-        #                otherwise go to (iv).
-        #           (ii) Solve linear system, compute slope, and go to (iii).
-        #          (iii) If slope < 0.0, take as search direction and quit, otherwise
-        #                go to (iv).
-        #           (iv) If σ = 0.0, set σ = σinit, otherwise set σ *= κσplus. Go to (i).
-
-        H = H + H' - triu(H)
-        σ = σhat
-        HσI = H + UniformScaling(σ)
-        Hf, Hd = ldlt(Positive, HσI, Val{true})
-        while any(Hd .< 1)
-            σ *= κσplus
-            HσI = H + UniformScaling(σ)
-            Hf, Hd = ldlt(Positive, HσI, Val{true})
-        end
-        KKT = [HσI J'; J UniformScaling(-μ)]
+        KKT = [H J'; J UniformScaling(-μ)]
+        dir .= -subres
         LDLT = Ma57(KKT)
         ma57_factorize(LDLT)
-        dir .= -subres
         ma57_solve!(LDLT, dir)
 
         # gradient of merit function
