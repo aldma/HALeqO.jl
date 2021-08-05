@@ -22,8 +22,8 @@ using Plots
 include("time_profiles.jl")
 
 # setup benchmarking
-filename = "cutest_eq_tol3"
-TOL = 1e-3 # default 1e-6
+filename = "cutest_eq_tol6"
+TOL = 1e-6 # default 1e-6
 MAXITER = 3000 # default 3000
 
 problems = (CUTEstModel(probname) for probname in probnames)
@@ -35,11 +35,11 @@ solvers = Dict{Symbol,Function}(
 )
 
 # warm up
+nlp = CUTEstModel("BT3")
 for solver ∈ keys(solvers)
-    nlp = CUTEstModel(probnames[rand(1:length(probnames))])
     out = solvers[solver](nlp)
-    finalize(nlp)
 end
+finalize(nlp)
 
 # run solvers!
 stats = bmark_solvers(solvers, problems)
@@ -66,5 +66,5 @@ tprof = time_profile(stats, cost)
 
 # store data
 for solver ∈ keys(stats)
-    CSV.write(filename * "_" * String(solver) * ".csv", stats[solver], header = true)
+    CSV.write("data/" * filename * "_" * String(solver) * ".csv", stats[solver], header = true)
 end
