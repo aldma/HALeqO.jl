@@ -17,7 +17,7 @@ probnames = CUTEst.select(
 
 # setup testing
 problems = (CUTEstModel(probname) for probname in probnames)
-solver = prob -> haleqo(prob; tol = 1e-4, max_iter = 1000, max_time = 100.0)
+solver = prob -> haleqo(prob)
 
 # run solver!
 stats = solve_problems(solver, problems)

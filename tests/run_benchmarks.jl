@@ -9,8 +9,8 @@ using CUTEst
 probnames = CUTEst.select(
     min_var = 1, # default 1
     min_con = 1, # default 1
-    max_var = 2, # default 100
-    max_con = 2, # default 100
+    max_var = 100, # default 100
+    max_con = 100, # default 100
     only_free_var = true,
     only_equ_con = true,
 )
@@ -22,9 +22,9 @@ using Plots
 include("time_profiles.jl")
 
 # setup benchmarking
-filename = "cutest_eq_tol5"
-TOL = 1e-5 # default 1e-6
-MAXITER = 100 # default 3000
+filename = "cutest_eq_tol3"
+TOL = 1e-3 # default 1e-6
+MAXITER = 3000 # default 3000
 
 problems = (CUTEstModel(probname) for probname in probnames)
 solvers = Dict{Symbol,Function}(
@@ -33,6 +33,13 @@ solvers = Dict{Symbol,Function}(
     :IPOPT => prob -> ipopt(prob; tol = TOL, print_level = 0, max_iter = MAXITER),
     :Percival => prob -> percival(prob; atol = TOL, rtol = 0.0, ctol = TOL, max_iter = MAXITER),
 )
+
+# warm up
+for solver ∈ keys(solvers)
+    nlp = CUTEstModel(probnames[rand(1:length(probnames))])
+    out = solvers[solver](nlp)
+    finalize(nlp)
+end
 
 # run solvers!
 stats = bmark_solvers(solvers, problems)
@@ -59,5 +66,5 @@ tprof = time_profile(stats, cost)
 
 # store data
 for solver ∈ keys(stats)
-    CSV.write("data/" * filename * "_" * String(solver) * ".csv", stats[solver], header = true)
+    CSV.write(filename * "_" * String(solver) * ".csv", stats[solver], header = true)
 end

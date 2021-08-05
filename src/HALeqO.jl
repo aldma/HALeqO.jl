@@ -31,8 +31,9 @@ function haleqo(
     y::AbstractVector = copy(nlp.meta.y0),
     tol::Real = 1e-8,
     μ::Real = 1e-3,
-    max_iter::Int = 1000,
-    max_time::Real = 100.0,
+    max_iter::Int = 3000,
+    max_time::Real = 300.0,
+    max_eval::Int = 100000,
 )
 
     start_time = time()
@@ -48,6 +49,7 @@ function haleqo(
     β = 0.5
     κμminus = 0.1
     η = 1e-4
+    μmin = 1e-16
 
     # initialization
     iter = 0
@@ -63,8 +65,9 @@ function haleqo(
     cviolation = norm(cx, Inf)
     cviol__old = cviolation
     residy = cviolation
-    converged = optimality ≤ tol && cviolation ≤ tol
-    tired = iter ≥ max_iter || eltime ≥ max_time
+    is_solved = optimality ≤ tol && cviolation ≤ tol
+    is_infeasible = false
+    is_tired = iter ≥ max_iter || eltime ≥ max_time || neval_obj(nlp) > max_eval
     dir = zeros(T, nx + ny)
     xold = zeros(T, nx)
     yold = zeros(T, ny)
@@ -76,7 +79,7 @@ function haleqo(
     )
     @info log_row(Any[iter, fx, cviolation, optimality])
 
-    while !(converged || tired)
+    while !(is_solved || is_infeasible || is_tired)
 
         # sub-problem update
         if optimality ≤ tol && residy ≤ tol
@@ -149,27 +152,34 @@ function haleqo(
         subres[1:nx] .= grad(nlp, x) + jtprod(nlp, x, y)
         optimality = norm(subres[1:nx], Inf)
         cviolation = norm(cx, Inf)
-        converged = optimality ≤ tol && cviolation ≤ tol
+        is_solved = optimality ≤ tol && cviolation ≤ tol
 
         iter += 1
-        if !converged
+        if !is_solved
             eltime = time() - start_time
-            tired = iter ≥ max_iter || eltime ≥ max_time
-            if !tired
-                subres[nx+1:nx+ny] .= cx + μ .* (yhat - y)
-                residy = norm(subres[nx+1:nx+ny], Inf)
+            is_tired = iter ≥ max_iter || eltime ≥ max_time || neval_obj(nlp) > max_eval
+            if !is_tired
+                is_infeasible = μ < μmin && norm(jtprod(nlp, x, cx), Inf) < cviolation*√tol
+                if !is_infeasible
+                    subres[nx+1:nx+ny] .= cx + μ .* (yhat - y)
+                    residy = norm(subres[nx+1:nx+ny], Inf)
+                end
             end
         end
 
     end
 
-    status = if converged
+    status = if is_solved
         :first_order
-    elseif tired
+    elseif is_infeasible
+        :infeasible
+    elseif is_tired
         if iter ≥ max_iter
             :max_iter
-        else
+        elseif eltime ≥ max_time
             :max_time
+        elseif neval_obj(nlp) > max_eval
+            :max_eval
         end
     end
 
