@@ -2,15 +2,9 @@ module HALeqO
 
 export haleqo
 
-# JuliaSmoothOptimizers
-using SolverCore
-using NLPModels
-# stdlib
-using LinearAlgebra
-using SparseArrays
-# linear solvers
-using HSL
-using PositiveFactorizations
+using SolverCore, NLPModels
+using LinearAlgebra, SparseArrays
+using HSL, PositiveFactorizations
 
 """
     normsq(v)
@@ -18,9 +12,10 @@ using PositiveFactorizations
 normsq(v) = dot(v, v)
 
 """
-    merit(x, y, yhat, μ, fx, cx)
+    merit(y, yhat, μ, fx, cx)
 """
-merit(x, y, yhat, μ, fx, cx) = fx + 0.25 * μ * normsq(y) + normsq(cx + μ .* (yhat - 0.5 * y)) / μ
+merit(y, yhat, μ, fx, cx) =
+    fx + 0.25 * μ * normsq(y) + normsq(cx + μ .* (yhat - 0.5 * y)) / μ
 
 """
     haleqo( nlp )
@@ -30,10 +25,11 @@ function haleqo(
     x::AbstractVector = copy(nlp.meta.x0),
     y::AbstractVector = copy(nlp.meta.y0),
     tol::Real = 1e-8,
-    μ::Real = 1e-3,
+    μ::Real = 0.1,
     max_iter::Int = 3000,
     max_time::Real = 300.0,
     max_eval::Int = 100000,
+    use_filter::Bool = false,
 )
 
     start_time = time()
@@ -46,9 +42,9 @@ function haleqo(
 
     # parameters
     θ = 0.5
-    β = 0.5
+    ls_beta = 0.5
     κμminus = 0.1
-    η = 1e-4
+    ls_eta = 1e-4
     μmin = 1e-16
 
     # initialization
@@ -72,6 +68,21 @@ function haleqo(
     xold = zeros(T, nx)
     yold = zeros(T, ny)
 
+    rhoBM = (1.0 / μ) * max(1.0, fx) / max(1.0, 0.5*normsq(cx)) # without abs()
+    rhoBM = max(1e-4, min(rhoBM, 1e4))
+    μ = 1.0 / rhoBM
+
+    if use_filter
+        phi_beta = 0.1 # 0 < beta \le 1
+        phi_V(cviol, optim) = cviol + phi_beta * optim
+        phi_O(cviol, optim) = cviol * phi_beta + optim
+        phi_theta = 0.1 # 0 < theta < 1
+        phi_V_max = phi_V(cviolation, optimality)
+        phi_O_max = phi_O(cviolation, optimality)
+        phi_V_max *= phi_theta
+        phi_O_max *= phi_theta
+    end
+
     @info log_header(
         [:iter, :fx, :cviol, :optim, :μ, :resy],
         [Int, T, T, T, T, T],
@@ -80,24 +91,6 @@ function haleqo(
     @info log_row(Any[iter, fx, cviolation, optimality])
 
     while !(is_solved || is_infeasible || is_tired)
-
-        # sub-problem update
-        if optimality ≤ tol && residy ≤ tol
-            # check improvement in constraint violation
-            if cviolation > θ * cviol__old
-                # update dual regularization parameter
-                μ *= κμminus
-            end
-            # update dual estimate
-            yhat .= y
-            # re-evaluate some quantities
-            subres[nx+1:nx+ny] .= cx
-            cviol__old = cviolation
-            residy = cviolation
-            @info log_row(Any[iter, fx, cviolation, optimality, μ])
-        else
-            @info log_row(Any[iter, fx, cviolation, optimality, μ, residy])
-        end
 
         # search direction
         # compute Newton direction for the regularized sub-problem, possibly with
@@ -130,22 +123,22 @@ function haleqo(
         # merit function with Armijo sufficient decrease condition
         xold .= x
         yold .= y
-        mold = merit(x, y, yhat, μ, fx, cx)
+        mold = merit(y, yhat, μ, fx, cx)
+        slope *= ls_eta
         τ = one(T)
         x .+= dir[1:nx]
         y .+= dir[nx+1:nx+ny]
         while true
             fx = obj(nlp, x)
             cons!(nlp, x, cx)
-            m = merit(x, y, yhat, μ, fx, cx)
+            m = merit(y, yhat, μ, fx, cx)
             # check Armijo's condition
-            if m ≤ mold + η * τ * slope
+            if m ≤ mold + τ * slope
                 break
-            else
-                τ *= β
-                x .= xold + τ .* dir[1:nx]
-                y .= yold + τ .* dir[nx+1:nx+ny]
             end
+            τ *= ls_beta
+            x .= xold + τ .* dir[1:nx]
+            y .= yold + τ .* dir[nx+1:nx+ny]
         end
 
         # evaluate residuals and check termination
@@ -159,12 +152,47 @@ function haleqo(
             eltime = time() - start_time
             is_tired = iter ≥ max_iter || eltime ≥ max_time || neval_obj(nlp) > max_eval
             if !is_tired
-                is_infeasible = μ < μmin && norm(jtprod(nlp, x, cx), Inf) < cviolation*√tol
+                is_infeasible =
+                    μ < μmin && norm(jtprod(nlp, x, cx), Inf) < cviolation * √tol
                 if !is_infeasible
                     subres[nx+1:nx+ny] .= cx + μ .* (yhat - y)
                     residy = norm(subres[nx+1:nx+ny], Inf)
                 end
             end
+        end
+
+        # sub-problem update
+        if optimality ≤ tol && residy ≤ tol
+            iter_type = :M
+            # check improvement in constraint violation
+            if cviolation > θ * cviol__old
+                # update dual regularization parameter
+                μ *= κμminus
+            end
+            # update dual estimate
+            yhat .= y
+            # re-evaluate some quantities
+            subres[nx+1:nx+ny] .= cx
+            cviol__old = cviolation
+            residy = cviolation
+            @info log_row(Any[iter, fx, cviolation, optimality, μ, "$(iter_type)"])
+        elseif use_filter && phi_V(cviolation, optimality) ≤ phi_V_max
+            iter_type = :V
+            phi_V_max *= phi_theta
+            yhat .= y
+            subres[nx+1:nx+ny] .= cx
+            residy = cviolation
+            @info log_row(Any[iter, fx, cviolation, optimality, μ, "$(iter_type)"])
+        elseif use_filter && phi_O(cviolation, optimality) ≤ phi_O_max
+            iter_type = :O
+            phi_O_max *= phi_theta
+            yhat .= y
+            subres[nx+1:nx+ny] .= cx
+            residy = cviolation
+            @info log_row(Any[iter, fx, cviolation, optimality, μ, "$(iter_type)"])
+        else
+            iter_type = :F
+            @info log_row(Any[iter, fx, cviolation, optimality, μ, residy])
         end
 
     end
