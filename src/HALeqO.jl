@@ -46,6 +46,8 @@ function haleqo(
     κμminus = 0.1
     ls_eta = 1e-4
     μmin = 1e-16
+    subtol = sqrt(tol) # assuming tol < 1
+    kappa_e = 0.1
 
     # initialization
     iter = 0
@@ -162,12 +164,16 @@ function haleqo(
         end
 
         # sub-problem update
-        if optimality ≤ tol && residy ≤ tol
+        if optimality ≤ subtol && residy ≤ subtol
             iter_type = :M
             # check improvement in constraint violation
-            if cviolation > θ * cviol__old
+            if cviolation > max(θ * cviol__old, tol)
                 # update dual regularization parameter
-                μ *= κμminus
+                μ = max(μmin, κμminus * μ)
+            end
+            # update subproblem tolerance
+            if cviolation ≤ sqrt(tol)
+                subtol = max(tol, kappa_e*subtol)
             end
             # update dual estimate
             yhat .= y
