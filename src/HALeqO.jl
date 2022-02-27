@@ -8,15 +8,14 @@ using PositiveFactorizations
 using QDLDL
 
 """
-    normsq(v)
-"""
-normsq(v) = dot(v, v)
-
-"""
     merit(y, yhat, μ, fx, cx)
 """
-merit(y, yhat, μ, fx, cx) =
-    fx + 0.25 * μ * normsq(y) + normsq(cx + μ .* (yhat - 0.5 * y)) / μ
+function merit(y, yhat, μ, fx, cx)
+    m = fx
+    m += 0.25 * sum( μ .* y.^2 )
+    m += sum( (cx + μ .* (yhat - 0.5 * y)).^2 ./ μ )
+    return m
+end
 
 """
     haleqo( nlp )
@@ -71,8 +70,8 @@ function haleqo(
     xold = zeros(T, nx)
     yold = zeros(T, ny)
 
-    rhoBM = (1.0 / μ) * max(1.0, fx) / max(1.0, 0.5*normsq(cx)) # without abs()
-    rhoBM = max(1e-4, min(rhoBM, 1e4))
+    rhoBM = max(1.0, fx) / max(1.0, 0.5*dot(cx, cx)) # without abs()
+    rhoBM = max(1e-8, min(10.0 * rhoBM, 1e8))
     μ = 1.0 / rhoBM
 
     if use_filter
