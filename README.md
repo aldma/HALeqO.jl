@@ -24,7 +24,7 @@ HALeqO.jl uses the free [QDLDL.jl](https://github.com/osqp/QDLDL.jl) routines as
 
 If you are using HALeqO for your work, we encourage you to
 
-* Cite the related [paper](https://doi.org/10.1109/CDC45484.2021.9683199),
+* [Cite](CITATION.bib) the related [paper](https://doi.org/10.1109/CDC45484.2021.9683199),
 * Put a star on this repository.
 
 ### Bug reports and support

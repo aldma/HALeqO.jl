@@ -8,12 +8,13 @@ url: "https://github.com/aldma/HALeqO.jl"
 
 # Main paper that describes the algorithm
 preferred-citation:
-  type: inproceedings
+  type: article
   authors:
   - family-names: "De Marchi"
     given-names: "Alberto"
   title: "Augmented Lagrangian methods as dynamical systems for constrained optimization"
-  booktitle: "2021 60th IEEE Conference on Decision and Control (CDC)"
+  collection-title: "2021 60th IEEE Conference on Decision and Control (CDC)"
+  collection-type: proceedings
   start: 6533 # First page number
   end: 6538 # Last page number
   year: 2021
