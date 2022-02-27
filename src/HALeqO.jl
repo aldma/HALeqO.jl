@@ -4,7 +4,8 @@ export haleqo
 
 using SolverCore, NLPModels
 using LinearAlgebra, SparseArrays
-using HSL, PositiveFactorizations
+using PositiveFactorizations
+using QDLDL
 
 """
     normsq(v)
@@ -104,9 +105,8 @@ function haleqo(
 
         KKT = [H J'; J UniformScaling(-μ)]
         dir .= -subres
-        LDLT = Ma57(KKT)
-        ma57_factorize(LDLT)
-        ma57_solve!(LDLT, dir)
+        LDLT = qdldl(KKT)
+        solve!(LDLT, dir)
 
         # gradient of merit function
         # ∇x merit = resx + (2/μ) resy
