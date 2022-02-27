@@ -8,12 +8,12 @@ using PositiveFactorizations
 using QDLDL
 
 """
-    merit(y, yhat, μ, fx, cx)
+    merit(y, yhat, mu, fx, cx)
 """
-function merit(y, yhat, μ, fx, cx)
+function merit(y, yhat, mu, fx, cx)
     m = fx
-    m += 0.25 * sum( μ .* y.^2 )
-    m += sum( (cx + μ .* (yhat - 0.5 * y)).^2 ./ μ )
+    m += 0.25 * sum( mu .* y.^2 )
+    m += sum( (cx + mu .* (yhat - 0.5 * y)).^2 ./ mu )
     return m
 end
 
@@ -25,7 +25,7 @@ function haleqo(
     x::AbstractVector = copy(nlp.meta.x0),
     y::AbstractVector = copy(nlp.meta.y0),
     tol::Real = 1e-8,
-    μ::Real = 0.1,
+    mu::Real = 0.1,
     max_iter::Int = 3000,
     max_time::Real = 300.0,
     max_eval::Int = 100000,
@@ -43,9 +43,9 @@ function haleqo(
     # parameters
     θ = 0.5
     ls_beta = 0.5
-    κμminus = 0.1
+    κmuminus = 0.1
     ls_eta = 1e-4
-    μmin = 1e-16
+    mumin = 1e-16
     subtol = sqrt(tol) # assuming tol < 1
     kappa_e = 0.1
 
@@ -72,7 +72,7 @@ function haleqo(
 
     rhoBM = max(1.0, fx) / max(1.0, 0.5*dot(cx, cx)) # without abs()
     rhoBM = max(1e-8, min(10.0 * rhoBM, 1e8))
-    μ = 1.0 / rhoBM
+    mu = 1.0 / rhoBM
 
     if use_filter
         phi_beta = 0.1 # 0 < beta \le 1
@@ -102,15 +102,15 @@ function haleqo(
         H = Symmetric(SparseMatrixCSC(Matrix(cholesky(Positive, H, Val{false}))))
         J = jac(nlp, x)
 
-        KKT = [H J'; J UniformScaling(-μ)]
+        KKT = [H J'; J UniformScaling(-mu)]
         dir .= -subres
         LDLT = qdldl(KKT)
         solve!(LDLT, dir)
 
         # gradient of merit function
-        # ∇x merit = resx + (2/μ) resy
+        # ∇x merit = resx + (2/mu) resy
         # ∇y merit = - resy
-        xold .= subres[1:nx] + (2.0 / μ) .* jtprod(nlp, x, subres[nx+1:nx+ny])
+        xold .= subres[1:nx] + (2.0 / mu) .* jtprod(nlp, x, subres[nx+1:nx+ny])
         # slope of merit along search direction
         # slope = ∇merit ⋅ dir
         slope = dot(dir[1:nx], xold) - dot(dir[nx+1:nx+ny], subres[nx+1:nx+ny])
@@ -124,7 +124,7 @@ function haleqo(
         # merit function with Armijo sufficient decrease condition
         xold .= x
         yold .= y
-        mold = merit(y, yhat, μ, fx, cx)
+        mold = merit(y, yhat, mu, fx, cx)
         slope *= ls_eta
         τ = one(T)
         x .+= dir[1:nx]
@@ -132,7 +132,7 @@ function haleqo(
         while true
             fx = obj(nlp, x)
             cons!(nlp, x, cx)
-            m = merit(y, yhat, μ, fx, cx)
+            m = merit(y, yhat, mu, fx, cx)
             # check Armijo's condition
             if m ≤ mold + τ * slope
                 break
@@ -154,9 +154,9 @@ function haleqo(
             is_tired = iter ≥ max_iter || eltime ≥ max_time || neval_obj(nlp) > max_eval
             if !is_tired
                 is_infeasible =
-                    μ < μmin && norm(jtprod(nlp, x, cx), Inf) < cviolation * √tol
+                    mu < mumin && norm(jtprod(nlp, x, cx), Inf) < cviolation * √tol
                 if !is_infeasible
-                    subres[nx+1:nx+ny] .= cx + μ .* (yhat - y)
+                    subres[nx+1:nx+ny] .= cx + mu .* (yhat - y)
                     residy = norm(subres[nx+1:nx+ny], Inf)
                 end
             end
@@ -168,7 +168,7 @@ function haleqo(
             # check improvement in constraint violation
             if cviolation > max(θ * cviol__old, tol)
                 # update dual regularization parameter
-                μ = max(μmin, κμminus * μ)
+                mu = max(mumin, κmuminus * mu)
             end
             # update subproblem tolerance
             if cviolation ≤ sqrt(tol)
@@ -180,24 +180,24 @@ function haleqo(
             subres[nx+1:nx+ny] .= cx
             cviol__old = cviolation
             residy = cviolation
-            @info log_row(Any[iter, fx, cviolation, optimality, μ, "$(iter_type)"])
+            @info log_row(Any[iter, fx, cviolation, optimality, mu, "$(iter_type)"])
         elseif use_filter && phi_V(cviolation, optimality) ≤ phi_V_max
             iter_type = :V
             phi_V_max *= phi_theta
             yhat .= y
             subres[nx+1:nx+ny] .= cx
             residy = cviolation
-            @info log_row(Any[iter, fx, cviolation, optimality, μ, "$(iter_type)"])
+            @info log_row(Any[iter, fx, cviolation, optimality, mu, "$(iter_type)"])
         elseif use_filter && phi_O(cviolation, optimality) ≤ phi_O_max
             iter_type = :O
             phi_O_max *= phi_theta
             yhat .= y
             subres[nx+1:nx+ny] .= cx
             residy = cviolation
-            @info log_row(Any[iter, fx, cviolation, optimality, μ, "$(iter_type)"])
+            @info log_row(Any[iter, fx, cviolation, optimality, mu, "$(iter_type)"])
         else
             iter_type = :F
-            @info log_row(Any[iter, fx, cviolation, optimality, μ, residy])
+            @info log_row(Any[iter, fx, cviolation, optimality, mu, residy])
         end
 
     end
