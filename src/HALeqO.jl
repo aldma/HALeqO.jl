@@ -57,7 +57,11 @@ function haleqo(
     cx = cons(nlp, x)
     yhat = copy(y)
     subres = zeros(T, nx + ny)
-    subres[1:nx] .= grad(nlp, x) + jtprod(nlp, x, y)
+    dfx = similar(x)
+    jtv = similar(x)
+    grad!(nlp, x, dfx)
+    jtprod!(nlp, x, y, jtv)
+    subres[1:nx] .= dfx .+ jtv
     subres[nx+1:nx+ny] .= cx
     optimality = norm(subres[1:nx], Inf)
     cviolation = norm(cx, Inf)
@@ -67,11 +71,11 @@ function haleqo(
     is_infeasible = false
     is_tired = iter ≥ max_iter || eltime ≥ max_time || neval_obj(nlp) > max_eval
     dir = zeros(T, nx + ny)
-    xold = zeros(T, nx)
-    yold = zeros(T, ny)
+    xold = similar(x)
+    yold = similar(y)
 
     rhoBM = max(1.0, fx) / max(1.0, 0.5*dot(cx, cx)) # without abs()
-    rhoBM = max(1e-8, min(10.0 * rhoBM, 1e8))
+    rhoBM = max(1e-8, min(rhoBM, 1e8))
     mu = 1.0 / rhoBM
 
     if use_filter
@@ -110,7 +114,8 @@ function haleqo(
         # gradient of merit function
         # ∇x merit = resx + (2/mu) resy
         # ∇y merit = - resy
-        xold .= subres[1:nx] + (2.0 / mu) .* jtprod(nlp, x, subres[nx+1:nx+ny])
+        jtprod!(nlp, x, subres[nx+1:nx+ny], jtv)
+        xold .= subres[1:nx] + (2.0 / mu) .* jtv
         # slope of merit along search direction
         # slope = ∇merit ⋅ dir
         slope = dot(dir[1:nx], xold) - dot(dir[nx+1:nx+ny], subres[nx+1:nx+ny])
@@ -126,7 +131,7 @@ function haleqo(
         yold .= y
         mold = merit(y, yhat, mu, fx, cx)
         slope *= ls_eta
-        τ = one(T)
+        τ = T(1)
         x .+= dir[1:nx]
         y .+= dir[nx+1:nx+ny]
         while true
@@ -134,7 +139,8 @@ function haleqo(
             cons!(nlp, x, cx)
             m = merit(y, yhat, mu, fx, cx)
             # check Armijo's condition
-            if m ≤ mold + τ * slope
+            tol = 10 * eps(T) * (1 + abs(m))
+            if m ≤ mold + τ * slope + tol
                 break
             end
             τ *= ls_beta
@@ -143,7 +149,9 @@ function haleqo(
         end
 
         # evaluate residuals and check termination
-        subres[1:nx] .= grad(nlp, x) + jtprod(nlp, x, y)
+        grad!(nlp, x, dfx)
+        jtprod!(nlp, x, y, jtv)
+        subres[1:nx] .= dfx .+ jtv
         optimality = norm(subres[1:nx], Inf)
         cviolation = norm(cx, Inf)
         is_solved = optimality ≤ tol && cviolation ≤ tol
@@ -153,8 +161,9 @@ function haleqo(
             eltime = time() - start_time
             is_tired = iter ≥ max_iter || eltime ≥ max_time || neval_obj(nlp) > max_eval
             if !is_tired
+                jtprod!(nlp, x, cx, jtv)
                 is_infeasible =
-                    mu < mumin && norm(jtprod(nlp, x, cx), Inf) < cviolation * √tol
+                    mu < mumin && norm(jtv, Inf) < cviolation * √tol
                 if !is_infeasible
                     subres[nx+1:nx+ny] .= cx + mu .* (yhat - y)
                     residy = norm(subres[nx+1:nx+ny], Inf)
@@ -214,6 +223,8 @@ function haleqo(
         elseif neval_obj(nlp) > max_eval
             :max_eval
         end
+    else
+        :exception
     end
 
     # output
