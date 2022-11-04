@@ -108,8 +108,8 @@ function haleqo(
 
         KKT = [H J'; J UniformScaling(-mu)]
         dir .= -subres
-        LDLT = qdldl(KKT)
-        solve!(LDLT, dir)
+        LDLT = QDLDL.qdldl(KKT)
+        QDLDL.solve!(LDLT, dir)
 
         # gradient of merit function
         # ∇x merit = resx + (2/mu) resy
