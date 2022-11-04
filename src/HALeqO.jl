@@ -28,7 +28,6 @@ function haleqo(
     max_iter::Int = 3000,
     max_time::Real = 300.0,
     max_eval::Int = 100000,
-    use_filter::Bool = false,
 )
 
     start_time = time()
@@ -76,17 +75,6 @@ function haleqo(
     rhoBM = max(1.0, fx) / max(1.0, 0.5*dot(cx, cx)) # without abs()
     rhoBM = max(1e-8, min(rhoBM, 1e8))
     mu = 1.0 / rhoBM
-
-    if use_filter
-        phi_beta = 0.1 # 0 < beta \le 1
-        phi_V(cviol, optim) = cviol + phi_beta * optim
-        phi_O(cviol, optim) = cviol * phi_beta + optim
-        phi_theta = 0.1 # 0 < theta < 1
-        phi_V_max = phi_V(cviolation, optimality)
-        phi_O_max = phi_O(cviolation, optimality)
-        phi_V_max *= phi_theta
-        phi_O_max *= phi_theta
-    end
 
     @info log_header(
         [:iter, :fx, :cviol, :optim, :μ, :resy],
@@ -188,20 +176,6 @@ function haleqo(
             # re-evaluate some quantities
             subres[nx+1:nx+ny] .= cx
             cviol__old = cviolation
-            residy = cviolation
-            @info log_row(Any[iter, fx, cviolation, optimality, mu, "$(iter_type)"])
-        elseif use_filter && phi_V(cviolation, optimality) ≤ phi_V_max
-            iter_type = :V
-            phi_V_max *= phi_theta
-            yhat .= y
-            subres[nx+1:nx+ny] .= cx
-            residy = cviolation
-            @info log_row(Any[iter, fx, cviolation, optimality, mu, "$(iter_type)"])
-        elseif use_filter && phi_O(cviolation, optimality) ≤ phi_O_max
-            iter_type = :O
-            phi_O_max *= phi_theta
-            yhat .= y
-            subres[nx+1:nx+ny] .= cx
             residy = cviolation
             @info log_row(Any[iter, fx, cviolation, optimality, mu, "$(iter_type)"])
         else
