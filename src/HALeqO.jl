@@ -103,7 +103,8 @@ function haleqo(
         # some perturbation of the Hessian matrix to obtain a descent direction
         # for the merit function
         H = hess(nlp, x, y)
-        H = Symmetric(SparseMatrixCSC(Matrix(cholesky(Positive, H, Val{false}))))
+        H = cholesky(Positive, H) # without pivoting
+        H = Symmetric(SparseMatrixCSC(Matrix(H)))
         J = jac(nlp, x)
 
         KKT = [H J'; J UniformScaling(-mu)]
