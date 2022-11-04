@@ -25,7 +25,6 @@ function haleqo(
     x::AbstractVector = copy(nlp.meta.x0),
     y::AbstractVector = copy(nlp.meta.y0),
     tol::Real = 1e-8,
-    mu::Real = 0.1,
     max_iter::Int = 3000,
     max_time::Real = 300.0,
     max_eval::Int = 100000,
