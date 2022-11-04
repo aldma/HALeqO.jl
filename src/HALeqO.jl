@@ -230,13 +230,13 @@ function haleqo(
     # output
     eltime = time() - start_time
     return GenericExecutionStats(
-        status,
         nlp,
+        status = status,
         solution = x,
         objective = fx,
-        multipliers = y,
         dual_feas = optimality,
         primal_feas = cviolation,
+        multipliers = y,
         iter = iter,
         elapsed_time = eltime,
     )
